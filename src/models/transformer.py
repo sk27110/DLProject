@@ -1,23 +1,14 @@
 import torch
 import torch.nn as nn
 from torch.nn import TransformerDecoder, TransformerDecoderLayer
-import timm
 
 
 class ImageCaptioningModelTransformer(nn.Module):
-    def __init__(self, vocab_size, decoder_dim=256, nhead=8, num_layers=2, max_len=20, dropout=0.1):
+    def __init__(self, vocab_size, vit_model, decoder_dim=256, nhead=8, num_layers=2, max_len=20, dropout=0.1):
         super().__init__()
         self.decoder_dim = decoder_dim
         self.max_len = max_len
         self.word_embedding = nn.Embedding(vocab_size, decoder_dim)
-
-
-        vit_model = timm.create_model('vit_small_patch16_224', pretrained=True)
-        vit_model.head = torch.nn.Identity()
-        for p in vit_model.parameters():
-            p.requires_grad = False
-
-        vit_model.eval()
 
         self.vit_model = vit_model
 

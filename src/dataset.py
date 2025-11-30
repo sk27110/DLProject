@@ -8,6 +8,7 @@ import os
 from transformers import BertTokenizer
 from sklearn.model_selection import train_test_split
 from src.transforms import transform_train, transform_val
+from torch.utils.data import Subset
 
 
 class FlickrDataset(Dataset):
@@ -66,8 +67,8 @@ def get_datasets():
         tmp_imgs, test_size=0.5, random_state=42
     )
     
-    df_train = df[df['image'].isin(train_imgs)].reset_index(drop=True)
-    df_val   = df[df['image'].isin(val_imgs)].reset_index(drop=True)
+    df_train = df[df['image'].isin(train_imgs)].reset_index(drop=True)[:128]
+    df_val   = df[df['image'].isin(val_imgs)].reset_index(drop=True)[:64]
     df_test  = df[df['image'].isin(test_imgs)].reset_index(drop=True)
 
     tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')

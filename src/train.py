@@ -3,9 +3,11 @@ import torch
 from src.utils import generate_square_subsequent_mask
 import os
 import wandb
+import logging
+
 
 class Trainer:
-    def __init__(self, model, train_loader, val_loader, num_epoch, criterion, optimizer, checkpoint_dir,
+    def __init__(self, name, model, train_loader, val_loader, num_epoch, criterion, optimizer, checkpoint_dir,
                  scheduler=None, resume=False, last_checkpoint=None, use_wandb=False, project_name='Image caption'):
         self.model = model
         self.train_loader = train_loader
@@ -23,10 +25,39 @@ class Trainer:
         self.use_wandb = use_wandb
         self.project_name = project_name
         self.best_val_loss = float("inf")
+        self.name=name
+
+
+        os.makedirs("logs", exist_ok=True)
+        log_file = f"logs/{self.name}.log"
+
+        self.logger = logging.getLogger(self.name)
+        self.logger.setLevel(logging.INFO)
+
+        fh = logging.FileHandler(log_file, encoding="utf-8")
+        fh.setLevel(logging.INFO)
+
+        ch = logging.StreamHandler()
+        ch.setLevel(logging.INFO)
+
+        formatter = logging.Formatter(
+            "%(asctime)s | %(levelname)s | %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S"
+        )
+        fh.setFormatter(formatter)
+        ch.setFormatter(formatter)
+
+        if not self.logger.handlers:
+            self.logger.addHandler(fh)
+            self.logger.addHandler(ch)
+
+        self.logger.info("Logger initialized.")
+
 
         if use_wandb:
             wandb.init(
                 project=self.project_name,
+                name=self.name,
                 config={
                     "epochs": num_epoch,
                     "batch_size": train_loader.batch_size,
@@ -39,43 +70,61 @@ class Trainer:
         if self.resume:
             self._load_checkpoint(self.last_checkpoint)
 
+
     def _train_one_epoch(self, epoch):
         self.model.train()
         total_loss = 0
 
-        for step, (images, captions, attention_mask) in enumerate(tqdm(self.train_loader, desc="Train")):
-            images = images.to(self.device)
-            captions = captions.to(self.device)
+        try:
+            for step, (images, captions, attention_mask) in enumerate(
+                tqdm(self.train_loader, desc="Train")
+            ):
+                images = images.to(self.device)
+                captions = captions.to(self.device)
 
-            self.optimizer.zero_grad()
-            tgt_mask = generate_square_subsequent_mask(captions.size(1)).to(self.device)
+                self.optimizer.zero_grad()
+                tgt_mask = generate_square_subsequent_mask(
+                    captions.size(1)
+                ).to(self.device)
 
-            output = self.model(images, captions, tgt_mask)
+                output = self.model(images, captions, tgt_mask)
 
-            target = captions[:, 1:]
-            output = output[:, :-1, :]
+                target = captions[:, 1:]
+                output = output[:, :-1, :]
 
-            loss = self.criterion(output.reshape(-1, output.size(-1)), target.reshape(-1))
-            loss.backward()
-            self.optimizer.step()
+                loss = self.criterion(
+                    output.reshape(-1, output.size(-1)),
+                    target.reshape(-1)
+                )
 
-            if self.scheduler:
-                self.scheduler.step()
+                loss.backward()
+                self.optimizer.step()
 
-            total_loss += loss.item()
+                if self.scheduler:
+                    self.scheduler.step()
 
-            if self.use_wandb:
-                wandb.log({
-                    "train_loss": loss.item(),
-                    "learning_rate": self.optimizer.param_groups[0]["lr"],
-                    "epoch": epoch,
-                    "step": epoch * len(self.train_loader) + step
-                })
+                total_loss += loss.item()
+
+                if self.use_wandb:
+                    wandb.log({
+                        "train_loss": loss.item(),
+                        "learning_rate": self.optimizer.param_groups[0]["lr"],
+                        "epoch": epoch,
+                        "step": epoch * len(self.train_loader) + step
+                    })
+
+        except Exception:
+            self.logger.error(
+                f"Error during training at epoch {epoch}",
+                exc_info=True
+            )
+            raise
 
         return total_loss / len(self.train_loader)
 
 
-    def _validate(self, epoch):
+
+    def _validate(self):
         self.model.eval()
         total_loss = 0
         with torch.no_grad():
@@ -92,52 +141,78 @@ class Trainer:
 
         avg_loss = total_loss / len(self.val_loader)
 
-        if self.use_wandb:
-            wandb.log({
-                "val_loss": avg_loss,
-                "epoch": epoch
-            })
-
         return avg_loss
 
 
     def train(self):
-        for epoch in range(self.start_epoch, self.num_epoch):
-            print(f"Epoch {epoch}")
-            train_loss = self._train_one_epoch(epoch)
-            val_loss = self._validate(epoch)
-            print(f"Train_loss: {train_loss:.4f} | Val_loss: {val_loss:.4f}")
-            self._save_checkpoint(epoch, val_loss, best=False)
+        try:
+            for epoch in range(self.start_epoch, self.num_epoch):
+                self.logger.info(f"Epoch {epoch}")
+
+                train_loss = self._train_one_epoch(epoch)
+                val_loss = self._validate()
+
+                self.logger.info(
+                    f"Train_loss: {train_loss:.4f} | Val_loss: {val_loss:.4f}"
+                )
+
+                self._save_checkpoint(epoch, val_loss)
+
+                if self.use_wandb:
+                    wandb.log({
+                        "val_loss epoch": val_loss,
+                        "train_loss epoch": train_loss,
+                        "epoch": epoch
+                    })
+
+            if self.use_wandb:
+                wandb.finish()
+
+        except Exception as e:
+            self.logger.error("Training failed with exception:", exc_info=True)
+            raise e
+
 
 
     def _save_checkpoint(self, epoch, val_loss):
         os.makedirs(self.checkpoint_dir, exist_ok=True)
-        filename = f"checkpoint_epoch{epoch}.pth"
-
+        filename = f"{self.name}_checkpoint_epoch_{epoch}.pth"
         path = os.path.join(self.checkpoint_dir, filename)
+
+        trainable_state_dict = {k: v for k, v in self.model.state_dict().items() if v.requires_grad}
 
         checkpoint = {
             "epoch": epoch,
             "val_loss": val_loss,
             "optimizer_state": self.optimizer.state_dict(),
             "scheduler_state": self.scheduler.state_dict() if self.scheduler else None,
-            "model_state": self.model.state_dict()
+            "model_state": trainable_state_dict
         }
 
         torch.save(checkpoint, path)
+        self.logger.info(f"Saving {self.name}_checkpoint_epoch_{epoch} to {path}")
 
         if self.use_wandb:
             wandb.save(path)
+
+
 
     def _load_checkpoint(self, checkpoint_name):
         path = os.path.join(self.checkpoint_dir, checkpoint_name)
         checkpoint = torch.load(path, map_location=self.device)
 
-        self.model.load_state_dict(checkpoint['model_state'])
-        self.optimizer.load_state_dict(checkpoint['optimizer_state'])
+        model_state_dict = self.model.state_dict()
+        trained_params = checkpoint["model_state"]
+        model_state_dict.update(trained_params)
+        self.model.load_state_dict(model_state_dict)
 
-        if self.scheduler and checkpoint['scheduler_state']:
-            self.scheduler.load_state_dict(checkpoint['scheduler_state'])
+        self.optimizer.load_state_dict(checkpoint["optimizer_state"])
+        if self.scheduler and checkpoint.get("scheduler_state") is not None:
+            self.scheduler.load_state_dict(checkpoint["scheduler_state"])
 
-        self.start_epoch = checkpoint['epoch'] + 1
-        print(f"Resumed from checkpoint: {checkpoint_name}, starting at epoch {self.start_epoch}")
+        self.start_epoch = checkpoint["epoch"] + 1
+        self.logger.info(
+            f"Resumed from checkpoint {checkpoint_name}, starting at epoch {self.start_epoch}"
+        )
+        
+
