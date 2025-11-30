@@ -1,0 +1,42 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints
+
+# Virtual environment
+venv/
+env/
+.venv/
+.env/
+
+# PyTorch saved models
+*.pt
+*.pth
+*.ckpt
+
+# Logs and outputs
+*.log
+tensorboard_logs/
+runs/
+
+# Datasets
+data/
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.h5
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# VS Code settings
+.vscode/
+
+# Python environment files
+*.env
+*.pip

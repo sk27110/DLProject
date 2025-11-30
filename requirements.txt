@@ -1,0 +1,21 @@
+# Работа с PyTorch
+torch>=2.1.0
+torchvision>=0.17.0
+
+# Transformers для токенизации и моделей
+transformers>=4.40.0
+
+# KaggleHub для скачивания датасетов
+kagglehub>=0.1.13
+
+# Работа с данными
+pandas>=2.1.0
+scikit-learn>=1.3.0
+numpy>=1.25.0
+
+# Работа с изображениями
+Pillow>=10.0.0
+
+# Дополнительно (для метрик BLEU, токенизации)
+nltk>=3.9.0
+tqdm>=4.66.0
