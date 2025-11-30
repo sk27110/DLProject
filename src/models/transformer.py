@@ -9,7 +9,6 @@ class ImageCaptioningModelTransformer(nn.Module):
         super().__init__()
         self.decoder_dim = decoder_dim
         self.max_len = max_len
-        self.img_proj = nn.Linear(self.vit_model.embed_dim, decoder_dim)
         self.word_embedding = nn.Embedding(vocab_size, decoder_dim)
 
 
@@ -21,6 +20,8 @@ class ImageCaptioningModelTransformer(nn.Module):
         vit_model.eval()
 
         self.vit_model = vit_model
+
+        self.img_proj = nn.Linear(self.vit_model.embed_dim, decoder_dim)
 
         decoder_layer = TransformerDecoderLayer(d_model=decoder_dim, nhead=nhead, dropout=dropout)
         self.transformer_decoder = TransformerDecoder(decoder_layer, num_layers=num_layers)

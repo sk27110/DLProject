@@ -26,7 +26,7 @@ class FlickrDataset(Dataset):
         img_name = row['image']
         caption = row['caption']
 
-        img_path = os.path.join(self.dir, img_name)
+        img_path = os.path.join(self.dir, 'Images', img_name)
 
         image = Image.open(img_path).convert('RGB')
 
