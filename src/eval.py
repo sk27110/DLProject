@@ -15,9 +15,16 @@ def evaluate_model(model, dataloader, criterion, tokenizer, device="cuda"):
             images = images.to(device)
             captions = captions.to(device)
 
+            padding_mask = (attention_mask == 0)
+
             tgt_mask = torch.triu(torch.ones(captions.size(1), captions.size(1)), diagonal=1).bool().to(device)
 
-            outputs = model(images, captions, tgt_mask)
+            outputs = model(
+                images, 
+                captions, 
+                tgt_mask,
+                padding_mask=padding_mask
+            )
 
             target = captions[:, 1:]
             outputs = outputs[:, :-1, :]

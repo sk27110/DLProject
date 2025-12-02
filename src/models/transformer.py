@@ -28,15 +28,16 @@ class ImageCaptioningModelTransformer(nn.Module):
             "dropout": dropout
         }
 
-    def forward(self, images, captions, tgt_mask=None):
-        batch_size = images.size(0)
-        img_features = self.vit_model(images)         
-        img_emb = self.img_proj(img_features) 
-        img_emb = img_emb.unsqueeze(0)
-        tgt_emb = self.word_embedding(captions).permute(1, 0, 2)
+    def forward(self, images, captions, tgt_mask=None, padding_mask=None):
 
-        out = self.transformer_decoder(tgt=tgt_emb, memory=img_emb, tgt_mask=tgt_mask)
+        img_emb = self.encoder(images)
+        tgt = self.token_embedding(captions) + self.pos_encoding[:, :captions.size(1), :]
 
-        out = self.fc_out(out)
+        dec_out = self.decoder(
+            tgt,
+            img_emb,
+            tgt_mask=tgt_mask,
+            tgt_key_padding_mask=padding_mask
+        )
 
-        return out.permute(1, 0, 2)
+        return self.output(dec_out)

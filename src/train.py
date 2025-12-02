@@ -83,13 +83,23 @@ class Trainer:
             ):
                 images = images.to(self.device)
                 captions = captions.to(self.device)
+                attention_mask = attention_mask.to(self.device)
 
                 self.optimizer.zero_grad()
+
+
                 tgt_mask = generate_square_subsequent_mask(
                     captions.size(1)
                 ).to(self.device)
 
-                output = self.model(images, captions, tgt_mask)
+                padding_mask = (attention_mask == 0)   # bool tensor
+
+                output = self.model(
+                    images, 
+                    captions, 
+                    tgt_mask=tgt_mask, 
+                    padding_mask=padding_mask
+                )
 
                 target = captions[:, 1:]
                 output = output[:, :-1, :]
@@ -135,7 +145,15 @@ class Trainer:
                 captions = captions.to(self.device)
                 tgt_mask = generate_square_subsequent_mask(captions.size(1)).to(self.device)
 
-                output = self.model(images, captions, tgt_mask)
+                padding_mask = (attention_mask == 0)
+
+                output = self.model(
+                    images, 
+                    captions, 
+                    tgt_mask=tgt_mask,
+                    padding_mask=padding_mask
+                )
+                
                 target = captions[:, 1:]
                 output = output[:, :-1, :]
                 loss = self.criterion(output.reshape(-1, output.size(-1)), target.reshape(-1))
@@ -181,8 +199,6 @@ class Trainer:
         filename = f"{self.name}_checkpoint_epoch_{epoch}.pth"
         path = os.path.join(self.checkpoint_dir, filename)
 
-        trainable_state_dict = {k: v for k, v in self.model.state_dict().items() if v.requires_grad}
-
         checkpoint = {
             "epoch": epoch,
             "val_loss": val_loss,
@@ -211,6 +227,7 @@ class Trainer:
         )
         
         self.model.load_state_dict(checkpoint['model_state'])
+        self.model.to(self.device)
 
         self.optimizer.load_state_dict(checkpoint["optimizer_state"])
         if self.scheduler and checkpoint.get("scheduler_state") is not None:

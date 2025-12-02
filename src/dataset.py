@@ -72,10 +72,8 @@ def preprocess_vit_embeddings(df, root_dir, save_path, transform, batch_size):
 
 
 class FlickrDataset(Dataset):
-    def __init__(self, df, root_dir, transform=None, tokenizer = None, max_len = 20):
+    def __init__(self, df, tokenizer=None, max_len=20):
         self.df = df.reset_index(drop=True)
-        self.dir = root_dir
-        self.transform = transform
         self.tokenizer = tokenizer
         self.max_len = max_len
 
@@ -84,26 +82,22 @@ class FlickrDataset(Dataset):
 
     def __getitem__(self, idx):
         row = self.df.iloc[idx]
-        img_name = row['image']
-        caption = row['caption']
 
-        img_path = os.path.join(self.dir, 'Images', img_name)
+        # уже готовый embedding
+        image_emb = torch.tensor(row["vit_embedding"], dtype=torch.float32)
 
-        image = Image.open(img_path).convert('RGB')
-
-        if self.transform:
-            image = self.transform(image)
-
+        caption = row["caption"]
         caption_tokens = self.tokenizer(
-            text = caption,
-            max_length = self.max_len,
-            padding = 'max_length',
-            truncation = True,
-            return_attention_mask = True,
-            return_tensors = 'pt'
+            caption,
+            max_length=self.max_len,
+            padding="max_length",
+            truncation=True,
+            return_attention_mask=True,
+            return_tensors="pt"
         )
 
-        return image, caption_tokens['input_ids'].squeeze(0), caption_tokens['attention_mask'].squeeze(0)
+        return image_emb, caption_tokens["input_ids"].squeeze(0), caption_tokens["attention_mask"].squeeze(0)
+
     
 
 
@@ -134,8 +128,8 @@ def get_datasets(batch_size=8):
 
     tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
 
-    train_dataset = FlickrDataset(df_train, path, transform_train, tokenizer, 20)
-    val_dataset   = FlickrDataset(df_val,   path, transform_val, tokenizer, 20)
-    test_dataset  = FlickrDataset(df_test,  path, transform_val, tokenizer, 20)
+    train_dataset = FlickrDataset(df_train, tokenizer, 20)
+    val_dataset = FlickrDataset(df_val, tokenizer, 20)
+    test_dataset = FlickrDataset(df_test, tokenizer, 20)
 
     return train_dataset, val_dataset, test_dataset
