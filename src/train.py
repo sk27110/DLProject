@@ -4,10 +4,11 @@ from src.utils import generate_square_subsequent_mask
 import os
 import wandb
 import logging
+from src.models import ImageCaptioningModelTransformer
 
 
 class Trainer:
-    def __init__(self, name, model, train_loader, val_loader, num_epoch, criterion, optimizer, checkpoint_dir,
+    def __init__(self, name, model, train_loader, val_loader, num_epoch, criterion, optimizer, checkpoint_dir, vit_model,
                  scheduler=None, resume=False, last_checkpoint=None, use_wandb=False, project_name='Image caption'):
         self.model = model
         self.train_loader = train_loader
@@ -26,6 +27,7 @@ class Trainer:
         self.project_name = project_name
         self.best_val_loss = float("inf")
         self.name=name
+        self.vit_model=vit_model
 
 
         os.makedirs("logs", exist_ok=True)
@@ -68,7 +70,7 @@ class Trainer:
             wandb.watch(self.model, log="all", log_freq=100)
 
         if self.resume:
-            self._load_checkpoint(self.last_checkpoint)
+            self._load_checkpoint(self.last_checkpoint, self.vit_model)
 
 
     def _train_one_epoch(self, epoch):
@@ -186,25 +188,29 @@ class Trainer:
             "val_loss": val_loss,
             "optimizer_state": self.optimizer.state_dict(),
             "scheduler_state": self.scheduler.state_dict() if self.scheduler else None,
-            "model_state": trainable_state_dict
+            "model_state": self.model.state_dict(),
+            "model_config": self.model.config
         }
 
         torch.save(checkpoint, path)
         self.logger.info(f"Saving {self.name}_checkpoint_epoch_{epoch} to {path}")
 
-        if self.use_wandb:
-            wandb.save(path)
 
-
-
-    def _load_checkpoint(self, checkpoint_name):
+    def _load_checkpoint(self, checkpoint_name, vit_model):
         path = os.path.join(self.checkpoint_dir, checkpoint_name)
         checkpoint = torch.load(path, map_location=self.device)
 
-        model_state_dict = self.model.state_dict()
-        trained_params = checkpoint["model_state"]
-        model_state_dict.update(trained_params)
-        self.model.load_state_dict(model_state_dict)
+        self.model = ImageCaptioningModelTransformer(
+            vocab_size=checkpoint['model_config']['vocab_size'],
+            vit_model=vit_model,
+            decoder_dim=checkpoint['model_config']['decoder_dim'],
+            nhead=checkpoint['model_config']['nhead'],
+            num_layers=checkpoint['model_config']['num_layers'],
+            max_len=checkpoint['model_config']['max_len'],
+            dropout=checkpoint['model_config']['dropout']
+        )
+        
+        self.model.load_state_dict(checkpoint['model_state'])
 
         self.optimizer.load_state_dict(checkpoint["optimizer_state"])
         if self.scheduler and checkpoint.get("scheduler_state") is not None:

@@ -19,6 +19,15 @@ class ImageCaptioningModelTransformer(nn.Module):
 
         self.fc_out = nn.Linear(decoder_dim, vocab_size)
 
+        self.config = {
+            "vocab_size": vocab_size,
+            "decoder_dim": decoder_dim,
+            "nhead": nhead,
+            "num_layers": num_layers,
+            "max_len": max_len,
+            "dropout": dropout
+        }
+
     def forward(self, images, captions, tgt_mask=None):
         batch_size = images.size(0)
         img_features = self.vit_model(images)         
